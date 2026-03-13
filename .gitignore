@@ -40,6 +40,13 @@ yarn-error.log*
 .tsbuildinfo
 next-env.d.ts
 
+# Local-only (not needed for web deployment)
+server.py
+start.command
+start.bat
+install.command
+install.bat
+
 # Python
 __pycache__/
 *.pyc
