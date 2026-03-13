@@ -265,7 +265,7 @@ export default function Dashboard() {
   // Check auth & load localStorage
   useEffect(() => {
     if (!isAuthenticated()) {
-      window.location.href = "/";
+      window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/`;
       return;
     }
     const saved = localStorage.getItem("amm_enterprise");
@@ -566,7 +566,7 @@ export default function Dashboard() {
 
   const handleLogout = () => {
     clearAuth();
-    window.location.href = "/";
+    window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/`;
   };
 
   return (

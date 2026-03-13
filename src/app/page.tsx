@@ -28,7 +28,7 @@ export default function Home() {
 
   useEffect(() => {
     if (isAuthenticated()) {
-      window.location.href = "/dashboard";
+      window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/dashboard`;
     } else {
       const config = getOAuthConfig();
       if (config) {
@@ -73,7 +73,7 @@ export default function Home() {
     try {
       const tokens = await exchangeCode(code.trim());
       saveAuth(tokens);
-      window.location.href = "/dashboard";
+      window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/dashboard`;
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "인증에 실패했습니다.");
     }
