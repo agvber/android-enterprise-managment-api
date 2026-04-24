@@ -470,8 +470,14 @@ export default function Dashboard() {
       LOCK: "이 기기를 잠금하시겠습니까?",
       REBOOT: "이 기기를 재부팅하시겠습니까?",
       RESET_PASSWORD: "",
+      RELINQUISH_OWNERSHIP: "",
     };
-    if (commandType !== "RESET_PASSWORD" && !confirm(labels[commandType])) return;
+    if (
+      commandType !== "RESET_PASSWORD" &&
+      commandType !== "RELINQUISH_OWNERSHIP" &&
+      !confirm(labels[commandType])
+    )
+      return;
 
     setLoading(true);
     try {
@@ -485,6 +491,22 @@ export default function Dashboard() {
         command = { type: "RESET_PASSWORD", newPassword: pw };
       } else if (commandType === "REBOOT") {
         command = { type: "REBOOT" };
+      } else if (commandType === "RELINQUISH_OWNERSHIP") {
+        const deviceId = target.split("/").pop() || "";
+        const typed = prompt(
+          `⚠ 관리 해제는 되돌릴 수 없습니다.\n\n해제하려면 기기 ID를 정확히 입력하세요:\n${deviceId}`
+        );
+        if (typed === null) { setLoading(false); return; }
+        if (typed.trim() !== deviceId) {
+          showMessage("error", "기기 ID가 일치하지 않습니다. 취소되었습니다.");
+          setLoading(false);
+          return;
+        }
+        if (!confirm(`정말로 기기 ${deviceId}의 관리를 해제하시겠습니까?\n\n이 작업 후 해당 기기는 Android Management API에서 관리되지 않습니다.`)) {
+          setLoading(false);
+          return;
+        }
+        command = { type: "RELINQUISH_OWNERSHIP" };
       }
       await issueCommand(target, command);
       showMessage("success", `${commandType} 명령이 전송되었습니다.`);
@@ -962,6 +984,12 @@ export default function Dashboard() {
                             className="text-xs bg-green-100 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-200"
                           >
                             📋 정책변경
+                          </button>
+                          <button
+                            onClick={() => handleCommand("RELINQUISH_OWNERSHIP", device.name)}
+                            className="text-xs bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg hover:bg-amber-200"
+                          >
+                            🚫 관리해제
                           </button>
                           <button
                             onClick={() => handleDeleteDevice(device.name!)}
