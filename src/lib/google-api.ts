@@ -324,6 +324,10 @@ export async function updateDevicePolicy(
   });
 }
 
+export async function getOperation(operationName: string) {
+  return amApi(operationName);
+}
+
 export async function issueCommand(
   deviceName: string,
   command: Record<string, unknown>

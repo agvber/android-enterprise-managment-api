@@ -25,6 +25,7 @@ import {
   deleteDevice,
   updateDevicePolicy,
   issueCommand,
+  getOperation,
   listPolicies,
   getPolicy,
   upsertPolicy,
@@ -194,6 +195,7 @@ export default function Dashboard() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [aliveCheckingDevice, setAliveCheckingDevice] = useState<string | null>(null);
 
   // Filters
   const [deviceStateFilter, setDeviceStateFilter] = useState<string>("ALL");
@@ -563,6 +565,41 @@ export default function Dashboard() {
       showMessage("error", e instanceof Error ? e.message : "Unknown error");
     }
     setLoading(false);
+  };
+
+  const handleAliveCheck = async (deviceName: string) => {
+    if (aliveCheckingDevice) return;
+    setAliveCheckingDevice(deviceName);
+    const startTime = Date.now();
+    const intervalMs = 10_000;
+    const maxWaitMs = 60_000;
+    try {
+      const op = await issueCommand(deviceName, {
+        type: "REQUEST_DEVICE_INFO",
+        requestDeviceInfo: { deviceInfo: "EID" },
+      });
+      const opName = op?.name;
+      if (!opName) throw new Error("명령 operation name이 반환되지 않았습니다");
+
+      let result: { done?: boolean; error?: { message?: string } } | null = null;
+      while (Date.now() - startTime < maxWaitMs) {
+        await new Promise((r) => setTimeout(r, intervalMs));
+        result = await getOperation(opName);
+        if (result?.done) break;
+      }
+
+      const seconds = ((Date.now() - startTime) / 1000).toFixed(1);
+      if (!result?.done) {
+        showMessage("error", `🩺 타임아웃 — ${seconds}초 내 응답 없음 (오프라인 가능성)`);
+      } else if (result.error) {
+        showMessage("error", `🩺 오류: ${result.error.message || "unknown"} (${seconds}초)`);
+      } else {
+        showMessage("success", `🩺 LIVE — ${seconds}초 만에 응답`);
+      }
+    } catch (e: unknown) {
+      showMessage("error", e instanceof Error ? e.message : "Unknown error");
+    }
+    setAliveCheckingDevice(null);
   };
 
   // ── Policies ──
@@ -1007,6 +1044,21 @@ export default function Dashboard() {
                             className="text-xs bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200"
                           >
                             📋 상세
+                          </button>
+                          <button
+                            onClick={() => handleAliveCheck(device.name!)}
+                            disabled={aliveCheckingDevice !== null}
+                            className={`text-xs px-3 py-1.5 rounded-lg ${
+                              aliveCheckingDevice === device.name
+                                ? "bg-cyan-50 text-cyan-400 cursor-wait"
+                                : aliveCheckingDevice !== null
+                                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                  : "bg-cyan-100 text-cyan-700 hover:bg-cyan-200"
+                            }`}
+                          >
+                            {aliveCheckingDevice === device.name
+                              ? "⏳ 확인중..."
+                              : "🩺 살아있음"}
                           </button>
                           <button
                             onClick={() => handleCommand("LOCK", device.name)}
