@@ -480,11 +480,14 @@ export default function Dashboard() {
       RESET_PASSWORD: "",
       RELINQUISH_OWNERSHIP: "",
       CLEAR_APP_DATA: "",
+      START_LOST_MODE: "",
+      STOP_LOST_MODE: "이 기기의 분실 모드를 해제하시겠습니까?",
     };
     if (
       commandType !== "RESET_PASSWORD" &&
       commandType !== "RELINQUISH_OWNERSHIP" &&
       commandType !== "CLEAR_APP_DATA" &&
+      commandType !== "START_LOST_MODE" &&
       !confirm(labels[commandType])
     )
       return;
@@ -536,6 +539,23 @@ export default function Dashboard() {
           type: "CLEAR_APP_DATA",
           clearAppsData: { packageNames },
         };
+      } else if (commandType === "START_LOST_MODE") {
+        const message = prompt(
+          "분실 화면에 표시할 메시지를 입력하세요:",
+          "분실된 기기입니다. 발견 시 연락 부탁드립니다."
+        );
+        if (message === null) { setLoading(false); return; }
+        const phone = prompt("연락받을 전화번호 (선택, 미입력 가능):") || "";
+        if (!confirm("이 기기를 분실 모드로 전환하시겠습니까?")) { setLoading(false); return; }
+        const startLostMode: Record<string, unknown> = {
+          lostMessage: { defaultMessage: message },
+        };
+        if (phone) {
+          startLostMode.lostPhoneNumber = { defaultMessage: phone };
+        }
+        command = { type: "START_LOST_MODE", startLostMode };
+      } else if (commandType === "STOP_LOST_MODE") {
+        command = { type: "STOP_LOST_MODE" };
       }
       await issueCommand(target, command);
       showMessage("success", `${commandType} 명령이 전송되었습니다.`);
@@ -1011,6 +1031,18 @@ export default function Dashboard() {
                             className="text-xs bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg hover:bg-orange-200"
                           >
                             🧹 앱데이터 초기화
+                          </button>
+                          <button
+                            onClick={() => handleCommand("START_LOST_MODE", device.name)}
+                            className="text-xs bg-pink-100 text-pink-700 px-3 py-1.5 rounded-lg hover:bg-pink-200"
+                          >
+                            🔍 분실모드
+                          </button>
+                          <button
+                            onClick={() => handleCommand("STOP_LOST_MODE", device.name)}
+                            className="text-xs bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-200"
+                          >
+                            🔓 분실해제
                           </button>
                           <button
                             onClick={() => {
