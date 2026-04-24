@@ -877,7 +877,12 @@ export default function Dashboard() {
                               IMEI: {device.networkInfo?.imei || "N/A"}
                             </p>
                             <p className="text-xs">
-                              정책: {device.policyName?.split("/").pop()} |
+                              정책: {device.policyName?.split("/").pop()}
+                              {device.appliedPolicyVersion && (
+                                <span className="ml-1 text-gray-400">
+                                  (v{device.appliedPolicyVersion})
+                                </span>
+                              )} |
                               등록: {device.enrollmentTime
                                 ? new Date(device.enrollmentTime).toLocaleDateString()
                                 : "N/A"}
