@@ -479,10 +479,12 @@ export default function Dashboard() {
       REBOOT: "이 기기를 재부팅하시겠습니까?",
       RESET_PASSWORD: "",
       RELINQUISH_OWNERSHIP: "",
+      CLEAR_APP_DATA: "",
     };
     if (
       commandType !== "RESET_PASSWORD" &&
       commandType !== "RELINQUISH_OWNERSHIP" &&
+      commandType !== "CLEAR_APP_DATA" &&
       !confirm(labels[commandType])
     )
       return;
@@ -515,6 +517,25 @@ export default function Dashboard() {
           return;
         }
         command = { type: "RELINQUISH_OWNERSHIP" };
+      } else if (commandType === "CLEAR_APP_DATA") {
+        const input = prompt(
+          "데이터를 초기화할 패키지명을 입력하세요 (여러 개는 쉼표로 구분)\n예: com.example.app1, com.example.app2"
+        );
+        if (input === null) { setLoading(false); return; }
+        const packageNames = input
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (packageNames.length === 0) { setLoading(false); return; }
+        if (
+          !confirm(
+            `다음 앱의 데이터를 초기화합니다:\n${packageNames.join("\n")}\n\n진행하시겠습니까?`
+          )
+        ) { setLoading(false); return; }
+        command = {
+          type: "CLEAR_APP_DATA",
+          clearAppsData: { packageNames },
+        };
       }
       await issueCommand(target, command);
       showMessage("success", `${commandType} 명령이 전송되었습니다.`);
@@ -984,6 +1005,12 @@ export default function Dashboard() {
                             className="text-xs bg-purple-100 text-purple-700 px-3 py-1.5 rounded-lg hover:bg-purple-200"
                           >
                             🔑 비밀번호
+                          </button>
+                          <button
+                            onClick={() => handleCommand("CLEAR_APP_DATA", device.name)}
+                            className="text-xs bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg hover:bg-orange-200"
+                          >
+                            🧹 앱데이터 초기화
                           </button>
                           <button
                             onClick={() => {
