@@ -199,6 +199,7 @@ export default function Dashboard() {
   const [deviceStateFilter, setDeviceStateFilter] = useState<string>("ALL");
   const [devicePolicyFilter, setDevicePolicyFilter] = useState<string>("ALL");
   const [deviceSearch, setDeviceSearch] = useState("");
+  const [deviceSort, setDeviceSort] = useState<string>("lastReport-desc");
 
   const filteredDevices = devices.filter((d) => {
     if (deviceStateFilter !== "ALL" && d.state !== deviceStateFilter) return false;
@@ -218,6 +219,27 @@ export default function Dashboard() {
       if (!haystack.includes(q)) return false;
     }
     return true;
+  });
+
+  const sortedDevices = [...filteredDevices].sort((a, b) => {
+    const [field, dir] = deviceSort.split("-");
+    const mult = dir === "asc" ? 1 : -1;
+    if (field === "name") {
+      const an = `${a.hardwareInfo?.brand || ""} ${a.hardwareInfo?.model || ""}`.trim().toLowerCase();
+      const bn = `${b.hardwareInfo?.brand || ""} ${b.hardwareInfo?.model || ""}`.trim().toLowerCase();
+      return an.localeCompare(bn) * mult;
+    }
+    if (field === "lastReport") {
+      const at = a.lastStatusReportTime ? new Date(a.lastStatusReportTime).getTime() : 0;
+      const bt = b.lastStatusReportTime ? new Date(b.lastStatusReportTime).getTime() : 0;
+      return (at - bt) * mult;
+    }
+    if (field === "enrollment") {
+      const at = a.enrollmentTime ? new Date(a.enrollmentTime).getTime() : 0;
+      const bt = b.enrollmentTime ? new Date(b.enrollmentTime).getTime() : 0;
+      return (at - bt) * mult;
+    }
+    return 0;
   });
 
   const deviceStates = ["ALL", ...Array.from(new Set(devices.map((d) => d.state).filter(Boolean)))];
@@ -824,6 +846,21 @@ export default function Dashboard() {
                       ))}
                     </select>
                   </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">정렬</label>
+                    <select
+                      value={deviceSort}
+                      onChange={(e) => setDeviceSort(e.target.value)}
+                      className="border rounded-lg px-3 py-1.5 text-sm"
+                    >
+                      <option value="lastReport-desc">마지막 보고 (최신순)</option>
+                      <option value="lastReport-asc">마지막 보고 (오래된순)</option>
+                      <option value="name-asc">이름 (가나다순)</option>
+                      <option value="name-desc">이름 (역순)</option>
+                      <option value="enrollment-desc">등록일 (최신순)</option>
+                      <option value="enrollment-asc">등록일 (오래된순)</option>
+                    </select>
+                  </div>
                   <div className="flex items-end">
                     <span className="text-xs text-gray-400 pb-2">
                       {filteredDevices.length} / {devices.length}대
@@ -846,7 +883,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {filteredDevices.map((device) => (
+                  {sortedDevices.map((device) => (
                     <div key={device.name} className="bg-white rounded-xl shadow p-5">
                       <div className="flex items-start justify-between">
                         <div>
