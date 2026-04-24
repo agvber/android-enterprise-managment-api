@@ -539,7 +539,7 @@ export default function Dashboard() {
         ) { setLoading(false); return; }
         command = {
           type: "CLEAR_APP_DATA",
-          clearAppsData: { packageNames },
+          clearAppsDataParams: { packageNames },
         };
       } else if (commandType === "START_LOST_MODE") {
         const message = prompt(
@@ -549,15 +549,15 @@ export default function Dashboard() {
         if (message === null) { setLoading(false); return; }
         const phone = prompt("연락받을 전화번호 (선택, 미입력 가능):") || "";
         if (!confirm("이 기기를 분실 모드로 전환하시겠습니까?")) { setLoading(false); return; }
-        const startLostMode: Record<string, unknown> = {
+        const startLostModeParams: Record<string, unknown> = {
           lostMessage: { defaultMessage: message },
         };
         if (phone) {
-          startLostMode.lostPhoneNumber = { defaultMessage: phone };
+          startLostModeParams.lostPhoneNumber = { defaultMessage: phone };
         }
-        command = { type: "START_LOST_MODE", startLostMode };
+        command = { type: "START_LOST_MODE", startLostModeParams };
       } else if (commandType === "STOP_LOST_MODE") {
-        command = { type: "STOP_LOST_MODE" };
+        command = { type: "STOP_LOST_MODE", stopLostModeParams: {} };
       }
       await issueCommand(target, command);
       showMessage("success", `${commandType} 명령이 전송되었습니다.`);
@@ -576,10 +576,7 @@ export default function Dashboard() {
     try {
       const op = await issueCommand(deviceName, {
         type: "REQUEST_DEVICE_INFO",
-        params: {
-          "@type": "type.googleapis.com/google.android.management.v1.RequestDeviceInfoParams",
-          deviceInfo: "EID",
-        },
+        requestDeviceInfoParams: { deviceInfo: "EID" },
       });
       const opName = op?.name;
       if (!opName) throw new Error("명령 operation name이 반환되지 않았습니다");
