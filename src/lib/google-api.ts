@@ -131,14 +131,44 @@ export function clearAuth() {
 export function isAuthenticated(): boolean {
   const raw = localStorage.getItem("amm_auth");
   if (!raw) return false;
-  const auth: StoredAuth = JSON.parse(raw);
-  return !!auth.access_token;
+  try {
+    const auth = JSON.parse(raw) as StoredAuth;
+    return !!auth.access_token && auth.expires_at > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+class AuthExpiredError extends Error {
+  constructor(message = "Session expired") {
+    super(message);
+    this.name = "AuthExpiredError";
+  }
+}
+
+function redirectToLogin() {
+  if (typeof window === "undefined") return;
+  clearAuth();
+  const base = process.env.NEXT_PUBLIC_BASE_PATH || "";
+  if (window.location.pathname !== `${base}/`) {
+    window.location.href = `${base}/`;
+  }
 }
 
 async function getAccessToken(): Promise<string> {
   const raw = localStorage.getItem("amm_auth");
-  if (!raw) throw new Error("Not authenticated");
-  const auth: StoredAuth = JSON.parse(raw);
+  if (!raw) {
+    redirectToLogin();
+    throw new AuthExpiredError("Not authenticated");
+  }
+
+  let auth: StoredAuth;
+  try {
+    auth = JSON.parse(raw) as StoredAuth;
+  } catch {
+    redirectToLogin();
+    throw new AuthExpiredError("Stored auth is corrupted");
+  }
 
   // If token is still valid (with 60s buffer)
   if (auth.expires_at > Date.now() + 60000) {
@@ -147,17 +177,23 @@ async function getAccessToken(): Promise<string> {
 
   // Try refresh
   if (auth.refresh_token) {
-    const newToken = await refreshAccessToken(auth.refresh_token);
-    const updated: StoredAuth = {
-      ...auth,
-      access_token: newToken,
-      expires_at: Date.now() + 3600 * 1000,
-    };
-    localStorage.setItem("amm_auth", JSON.stringify(updated));
-    return newToken;
+    try {
+      const newToken = await refreshAccessToken(auth.refresh_token);
+      const updated: StoredAuth = {
+        ...auth,
+        access_token: newToken,
+        expires_at: Date.now() + 3600 * 1000,
+      };
+      localStorage.setItem("amm_auth", JSON.stringify(updated));
+      return newToken;
+    } catch {
+      redirectToLogin();
+      throw new AuthExpiredError("Token refresh failed");
+    }
   }
 
-  throw new Error("Token expired. Please re-authenticate.");
+  redirectToLogin();
+  throw new AuthExpiredError("Token expired. Please re-authenticate.");
 }
 
 // ── API helper ──
@@ -175,6 +211,11 @@ async function amApi(
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
+
+  if (res.status === 401 || res.status === 403) {
+    redirectToLogin();
+    throw new AuthExpiredError("Session expired. Please sign in again.");
+  }
 
   if (res.status === 204) return null;
   const data = await res.json();
@@ -196,6 +237,10 @@ export async function listProjects() {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (res.status === 401 || res.status === 403) {
+      redirectToLogin();
+      throw new AuthExpiredError("Session expired. Please sign in again.");
+    }
     const data = await res.json();
     if (data.error) {
       throw new Error(data.error.message || JSON.stringify(data.error));
