@@ -243,7 +243,15 @@ export default function Dashboard() {
   });
 
   const deviceStates = ["ALL", ...Array.from(new Set(devices.map((d) => d.state).filter(Boolean)))];
-  const devicePolicies = ["ALL", ...Array.from(new Set(devices.map((d) => d.policyName).filter(Boolean)))];
+  const devicePolicies = [
+    "ALL",
+    ...Array.from(
+      new Set([
+        ...policies.map((p) => p.name).filter(Boolean),
+        ...devices.map((d) => d.policyName).filter(Boolean),
+      ])
+    ),
+  ];
 
   const [policyEditorMode, setPolicyEditorMode] = useState<"visual" | "json">("visual");
   const [policyId, setPolicyId] = useState("default");
@@ -582,6 +590,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (activeTab === "enterprise" && gcpProjects.length === 0) loadProjects();
     if (activeTab === "devices" && enterprise) loadDevices();
+    if (activeTab === "devices" && enterprise) loadPolicies();
     if (activeTab === "policies" && enterprise) loadPolicies();
     if (activeTab === "enrollment" && enterprise) loadPolicies();
   }, [activeTab, enterprise, gcpProjects.length, loadProjects, loadDevices, loadPolicies]);
