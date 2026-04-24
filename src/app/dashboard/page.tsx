@@ -576,6 +576,10 @@ export default function Dashboard() {
     try {
       const op = await issueCommand(deviceName, {
         type: "REQUEST_DEVICE_INFO",
+        params: {
+          "@type": "type.googleapis.com/google.android.management.v1.RequestDeviceInfoParams",
+          deviceInfo: "EID",
+        },
       });
       const opName = op?.name;
       if (!opName) throw new Error("명령 operation name이 반환되지 않았습니다");
