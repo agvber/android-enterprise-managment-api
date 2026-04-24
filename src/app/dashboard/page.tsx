@@ -1032,18 +1032,21 @@ export default function Dashboard() {
                           >
                             🧹 앱데이터 초기화
                           </button>
-                          <button
-                            onClick={() => handleCommand("START_LOST_MODE", device.name)}
-                            className="text-xs bg-pink-100 text-pink-700 px-3 py-1.5 rounded-lg hover:bg-pink-200"
-                          >
-                            🔍 분실모드
-                          </button>
-                          <button
-                            onClick={() => handleCommand("STOP_LOST_MODE", device.name)}
-                            className="text-xs bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-200"
-                          >
-                            🔓 분실해제
-                          </button>
+                          {device.state === "LOST" ? (
+                            <button
+                              onClick={() => handleCommand("STOP_LOST_MODE", device.name)}
+                              className="text-xs bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-200"
+                            >
+                              🔓 분실해제
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleCommand("START_LOST_MODE", device.name)}
+                              className="text-xs bg-pink-100 text-pink-700 px-3 py-1.5 rounded-lg hover:bg-pink-200"
+                            >
+                              🔍 분실모드
+                            </button>
+                          )}
                           <button
                             onClick={() => {
                               setChangePolicyTarget(device.name!);
