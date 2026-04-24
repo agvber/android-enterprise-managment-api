@@ -870,7 +870,10 @@ export default function Dashboard() {
                           <div className="text-sm text-gray-500 space-y-1">
                             <p>
                               Android {device.softwareInfo?.androidVersion || "N/A"} |
-                              보안 패치: {device.softwareInfo?.securityPatchLevel || "N/A"}
+                              보안 패치: {device.softwareInfo?.securityPatchLevel || "N/A"} |
+                              마지막 보고: {device.lastStatusReportTime
+                                ? new Date(device.lastStatusReportTime).toLocaleString()
+                                : "N/A"}
                             </p>
                             <p>
                               S/N: {device.hardwareInfo?.serialNumber || "N/A"} |
