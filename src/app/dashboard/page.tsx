@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import QRCode from "qrcode";
 import PolicyVisualEditor from "@/components/PolicyVisualEditor";
+import JsonEditor, { type JsonEditorHandle, type ValidationStatus } from "@/components/JsonEditor";
 import {
   isAuthenticated,
   clearAuth,
@@ -256,6 +257,8 @@ export default function Dashboard() {
   ];
 
   const [policyEditorMode, setPolicyEditorMode] = useState<"visual" | "json">("visual");
+  const policyJsonValid = useRef<ValidationStatus>({ ok: true });
+  const jsonEditorRef = useRef<JsonEditorHandle>(null);
   const [policyId, setPolicyId] = useState("default");
   const [policyJson, setPolicyJson] = useState(
     JSON.stringify(
@@ -620,6 +623,13 @@ export default function Dashboard() {
   const handleSavePolicy = async () => {
     if (!enterprise || !policyId) {
       showMessage("error", "Enterprise와 Policy ID를 입력하세요.");
+      return;
+    }
+    const v = policyJsonValid.current;
+    if (!v.ok) {
+      showMessage("error", `저장 불가 — ${v.line}행 ${v.col}열: ${v.message}`);
+      setPolicyEditorMode("json");
+      requestAnimationFrame(() => jsonEditorRef.current?.scrollToError());
       return;
     }
     if (!confirm(`정책 "${policyId}"을(를) 저장/업데이트하시겠습니까?`)) return;
@@ -1140,7 +1150,12 @@ export default function Dashboard() {
                     <button
                       onClick={() => {
                         if (policyEditorMode === "json") {
-                          try { JSON.parse(policyJson); } catch { showMessage("error", "JSON 형식이 올바르지 않습니다."); return; }
+                          const v = policyJsonValid.current;
+                          if (!v.ok) {
+                            showMessage("error", `JSON 오류 — ${v.line}행 ${v.col}열: ${v.message}`);
+                            jsonEditorRef.current?.scrollToError();
+                            return;
+                          }
                         }
                         setPolicyEditorMode("visual");
                       }}
@@ -1172,21 +1187,44 @@ export default function Dashboard() {
                   />
                 </div>
 
-                {policyEditorMode === "visual" ? (
-                  <div className="mb-3">
-                    <PolicyVisualEditor
-                      policy={(() => { try { return JSON.parse(policyJson); } catch { return {}; } })()}
-                      onChange={(p) => setPolicyJson(JSON.stringify(p, null, 2))}
-                    />
-                  </div>
-                ) : (
+                {policyEditorMode === "visual" ? (() => {
+                  let parsed: Record<string, unknown> = {};
+                  let parseError: string | null = null;
+                  try {
+                    parsed = JSON.parse(policyJson) as Record<string, unknown>;
+                  } catch (e) {
+                    parseError = e instanceof Error ? e.message : "Invalid JSON";
+                  }
+                  return (
+                    <div className="mb-3">
+                      {parseError && (
+                        <div className="mb-2 px-3 py-2 rounded-lg bg-red-50 text-red-700 text-sm flex items-center justify-between">
+                          <span>현재 JSON에 오류가 있어 빈 정책으로 표시됩니다.</span>
+                          <button
+                            type="button"
+                            onClick={() => setPolicyEditorMode("json")}
+                            className="ml-3 underline hover:text-red-900 shrink-0"
+                          >
+                            JSON에서 수정
+                          </button>
+                        </div>
+                      )}
+                      <PolicyVisualEditor
+                        policy={parsed}
+                        onChange={(p) => setPolicyJson(JSON.stringify(p, null, 2))}
+                      />
+                    </div>
+                  );
+                })() : (
                   <div className="mb-3">
                     <label className="text-sm text-gray-500 block mb-1">Policy JSON</label>
-                    <textarea
+                    <JsonEditor
+                      ref={jsonEditorRef}
                       value={policyJson}
-                      onChange={(e) => setPolicyJson(e.target.value)}
-                      rows={20}
-                      className="w-full border rounded-lg px-4 py-2 font-mono text-sm"
+                      onChange={setPolicyJson}
+                      minHeight="480px"
+                      ariaLabel="Policy JSON 편집기"
+                      onValidationChange={(s) => { policyJsonValid.current = s; }}
                     />
                   </div>
                 )}
