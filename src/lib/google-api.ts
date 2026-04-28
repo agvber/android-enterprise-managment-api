@@ -198,6 +198,35 @@ async function getAccessToken(): Promise<string> {
 
 // ── API helper ──
 
+// Centralized response handler — covers auth redirects, 204 No Content,
+// non-2xx responses (including non-JSON error bodies), and structured
+// `{ error: { message } }` error envelopes from Google APIs.
+async function parseGoogleApiResponse(res: Response) {
+  if (res.status === 401 || res.status === 403) {
+    redirectToLogin();
+    throw new AuthExpiredError("Session expired. Please sign in again.");
+  }
+  if (res.status === 204) return null;
+
+  const text = await res.text();
+  let data: { error?: { message?: string } } & Record<string, unknown> | null = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      /* non-JSON body — fall through to raw text below */
+    }
+  }
+
+  if (!res.ok) {
+    throw new Error(data?.error?.message || text || `${res.status} ${res.statusText}`);
+  }
+  if (data?.error) {
+    throw new Error(data.error.message || JSON.stringify(data.error));
+  }
+  return data;
+}
+
 async function amApi(
   path: string,
   options: { method?: string; body?: unknown } = {}
@@ -211,18 +240,7 @@ async function amApi(
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
-
-  if (res.status === 401 || res.status === 403) {
-    redirectToLogin();
-    throw new AuthExpiredError("Session expired. Please sign in again.");
-  }
-
-  if (res.status === 204) return null;
-  const data = await res.json();
-  if (data.error) {
-    throw new Error(data.error.message || JSON.stringify(data.error));
-  }
-  return data;
+  return parseGoogleApiResponse(res);
 }
 
 // ── GCP Projects ──
@@ -237,16 +255,9 @@ export async function listProjects() {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (res.status === 401 || res.status === 403) {
-      redirectToLogin();
-      throw new AuthExpiredError("Session expired. Please sign in again.");
-    }
-    const data = await res.json();
-    if (data.error) {
-      throw new Error(data.error.message || JSON.stringify(data.error));
-    }
-    projects.push(...(data.projects || []));
-    pageToken = data.nextPageToken || "";
+    const data = await parseGoogleApiResponse(res);
+    projects.push(...((data?.projects as unknown[]) || []));
+    pageToken = (data?.nextPageToken as string) || "";
   } while (pageToken);
 
   return projects as {
@@ -292,17 +303,12 @@ export async function completeEnterpriseSignup(
 export async function listDevices(enterpriseName: string) {
   const all = [];
   let pageToken = "";
-  let pageCount = 0;
   do {
     const params = pageToken ? `?pageSize=100&pageToken=${encodeURIComponent(pageToken)}` : "?pageSize=100";
     const data = await amApi(`${enterpriseName}/devices${params}`);
-    const devices = data?.devices || [];
-    pageCount++;
-    console.log(`[listDevices] 페이지 ${pageCount}: ${devices.length}대 조회, nextPageToken: ${data?.nextPageToken ? "있음" : "없음"}`);
-    all.push(...devices);
-    pageToken = data?.nextPageToken || "";
+    all.push(...((data?.devices as unknown[]) || []));
+    pageToken = (data?.nextPageToken as string) || "";
   } while (pageToken);
-  console.log(`[listDevices] 총 ${all.length}대 조회 완료 (${pageCount} 페이지)`);
   return all;
 }
 
@@ -346,8 +352,8 @@ export async function listPolicies(enterpriseName: string) {
   do {
     const params = pageToken ? `?pageSize=100&pageToken=${encodeURIComponent(pageToken)}` : "?pageSize=100";
     const data = await amApi(`${enterpriseName}/policies${params}`);
-    all.push(...(data?.policies || []));
-    pageToken = data?.nextPageToken || "";
+    all.push(...((data?.policies as unknown[]) || []));
+    pageToken = (data?.nextPageToken as string) || "";
   } while (pageToken);
   return all;
 }
