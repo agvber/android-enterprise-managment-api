@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type PolicyObj = Record<string, any>;
+type PolicyObj = Record<string, unknown>;
 
 const INSTALL_TYPES = [
   { value: "FORCE_INSTALLED", label: "강제 설치 (삭제 불가)" },
@@ -80,20 +79,18 @@ export default function PolicyVisualEditor({ policy, onChange }: Props) {
   const update = (path: string, value: unknown) => {
     const next = { ...policy };
     const keys = path.split(".");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let obj: any = next;
+    let obj: Record<string, unknown> = next;
     for (let i = 0; i < keys.length - 1; i++) {
       if (obj[keys[i]] === undefined) obj[keys[i]] = {};
-      obj = obj[keys[i]];
+      obj = obj[keys[i]] as Record<string, unknown>;
     }
     const last = keys[keys.length - 1];
     if (value === "" || value === undefined || value === false) {
       delete obj[last];
       // clean up empty parents
       if (keys.length > 1 && typeof obj === "object" && Object.keys(obj).length === 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let parent: any = next;
-        for (let i = 0; i < keys.length - 2; i++) parent = parent[keys[i]];
+        let parent: Record<string, unknown> = next;
+        for (let i = 0; i < keys.length - 2; i++) parent = parent[keys[i]] as Record<string, unknown>;
         delete parent[keys[keys.length - 2]];
       }
     } else {
@@ -104,24 +101,23 @@ export default function PolicyVisualEditor({ policy, onChange }: Props) {
 
   const getBool = (path: string): boolean => {
     const keys = path.split(".");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let obj: any = policy;
+    let obj: unknown = policy;
     for (const k of keys) {
-      if (obj === undefined) return false;
-      obj = obj[k];
+      if (obj === undefined || obj === null || typeof obj !== "object") return false;
+      obj = (obj as Record<string, unknown>)[k];
     }
     return obj === true;
   };
 
   const getStr = (path: string): string => {
     const keys = path.split(".");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let obj: any = policy;
+    let obj: unknown = policy;
     for (const k of keys) {
-      if (obj === undefined) return "";
-      obj = obj[k];
+      if (obj === undefined || obj === null || typeof obj !== "object") return "";
+      obj = (obj as Record<string, unknown>)[k];
     }
-    return (obj ?? "").toString();
+    if (obj === undefined || obj === null) return "";
+    return String(obj);
   };
 
   const getNum = (path: string): number | "" => {
@@ -130,8 +126,7 @@ export default function PolicyVisualEditor({ policy, onChange }: Props) {
   };
 
   // ── Apps ──
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const apps: Record<string, any>[] = policy.applications || [];
+  const apps: Record<string, unknown>[] = (policy.applications as Record<string, unknown>[] | undefined) || [];
   const [expandedApp, setExpandedApp] = useState<number | null>(null);
 
   const [newPkg, setNewPkg] = useState("");
@@ -164,13 +159,13 @@ export default function PolicyVisualEditor({ policy, onChange }: Props) {
   };
 
   const toggleAppDelegatedScope = (idx: number, scope: string, enabled: boolean) => {
-    const current: string[] = apps[idx].delegatedScopes || [];
+    const current: string[] = (apps[idx].delegatedScopes as string[] | undefined) || [];
     const next = enabled ? [...current, scope] : current.filter((s: string) => s !== scope);
     updateApp(idx, "delegatedScopes", next.length > 0 ? next : undefined);
   };
 
   const updateAppPermission = (idx: number, permission: string, policy_val: string) => {
-    const current: { permission: string; policy: string }[] = apps[idx].permissionGrants || [];
+    const current: { permission: string; policy: string }[] = (apps[idx].permissionGrants as { permission: string; policy: string }[] | undefined) || [];
     const existing = current.findIndex((p) => p.permission === permission);
     let next;
     if (policy_val === "") {
@@ -193,14 +188,29 @@ export default function PolicyVisualEditor({ policy, onChange }: Props) {
         {/* 전체 앱 기본 권한 정책 */}
         <SelectField
           label="전체 앱 기본 권한 정책"
-          value={policy.defaultPermissionPolicy || ""}
+          value={(policy.defaultPermissionPolicy as string | undefined) || ""}
           options={DEFAULT_PERMISSION_POLICIES}
           onChange={(v) => onChange({ ...policy, defaultPermissionPolicy: v || undefined })}
         />
         <div className="border-t my-3" />
 
         {/* 앱 목록 */}
-        {apps.map((app, i) => (
+        {apps.map((rawApp, i) => {
+          type AppEntry = {
+            packageName?: string;
+            installType?: string;
+            defaultPermissionPolicy?: string;
+            autoUpdateMode?: string;
+            minimumVersionCode?: number;
+            disabled?: boolean;
+            connectedWorkAndPersonalApp?: string;
+            managedConfiguration?: unknown;
+            permissionGrants?: { permission: string; policy: string }[];
+            delegatedScopes?: string[];
+            accessibleTrackIds?: string[];
+          };
+          const app = rawApp as AppEntry;
+          return (
           <div key={i} className="border rounded-lg mb-2 overflow-hidden">
             {/* 앱 헤더 */}
             <div className="flex items-center gap-2 px-3 py-2 bg-gray-50">
@@ -403,7 +413,8 @@ export default function PolicyVisualEditor({ policy, onChange }: Props) {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
 
         {/* 새 앱 추가 */}
         <div className="flex items-center gap-2 mt-3 pt-3 border-t">
@@ -577,23 +588,23 @@ export default function PolicyVisualEditor({ policy, onChange }: Props) {
 
       {/* ── 키가드(잠금화면) ── */}
       <EditorSection title="잠금화면 (Keyguard)" desc="잠금화면에서 비활성화할 기능입니다.">
-        <Toggle label="카메라 비활성화" checked={(policy.keyguardDisabledFeatures || []).includes("CAMERA")} onChange={(v) => {
-          const current: string[] = policy.keyguardDisabledFeatures || [];
+        <Toggle label="카메라 비활성화" checked={((policy.keyguardDisabledFeatures as string[] | undefined) || []).includes("CAMERA")} onChange={(v) => {
+          const current: string[] = (policy.keyguardDisabledFeatures as string[] | undefined) || [];
           const next = v ? [...current, "CAMERA"] : current.filter((f: string) => f !== "CAMERA");
           onChange({ ...policy, keyguardDisabledFeatures: next.length > 0 ? next : undefined });
         }} />
-        <Toggle label="알림 비활성화" checked={(policy.keyguardDisabledFeatures || []).includes("NOTIFICATIONS")} onChange={(v) => {
-          const current: string[] = policy.keyguardDisabledFeatures || [];
+        <Toggle label="알림 비활성화" checked={((policy.keyguardDisabledFeatures as string[] | undefined) || []).includes("NOTIFICATIONS")} onChange={(v) => {
+          const current: string[] = (policy.keyguardDisabledFeatures as string[] | undefined) || [];
           const next = v ? [...current, "NOTIFICATIONS"] : current.filter((f: string) => f !== "NOTIFICATIONS");
           onChange({ ...policy, keyguardDisabledFeatures: next.length > 0 ? next : undefined });
         }} />
-        <Toggle label="생체인식 비활성화" checked={(policy.keyguardDisabledFeatures || []).includes("BIOMETRICS")} onChange={(v) => {
-          const current: string[] = policy.keyguardDisabledFeatures || [];
+        <Toggle label="생체인식 비활성화" checked={((policy.keyguardDisabledFeatures as string[] | undefined) || []).includes("BIOMETRICS")} onChange={(v) => {
+          const current: string[] = (policy.keyguardDisabledFeatures as string[] | undefined) || [];
           const next = v ? [...current, "BIOMETRICS"] : current.filter((f: string) => f !== "BIOMETRICS");
           onChange({ ...policy, keyguardDisabledFeatures: next.length > 0 ? next : undefined });
         }} />
-        <Toggle label="전체 비활성화" checked={(policy.keyguardDisabledFeatures || []).includes("ALL_FEATURES")} onChange={(v) => {
-          const current: string[] = policy.keyguardDisabledFeatures || [];
+        <Toggle label="전체 비활성화" checked={((policy.keyguardDisabledFeatures as string[] | undefined) || []).includes("ALL_FEATURES")} onChange={(v) => {
+          const current: string[] = (policy.keyguardDisabledFeatures as string[] | undefined) || [];
           const next = v ? [...current, "ALL_FEATURES"] : current.filter((f: string) => f !== "ALL_FEATURES");
           onChange({ ...policy, keyguardDisabledFeatures: next.length > 0 ? next : undefined });
         }} />

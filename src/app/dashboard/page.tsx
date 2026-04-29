@@ -165,6 +165,21 @@ const NAV_ITEMS = [
   { id: "enrollment", label: "기기 등록", icon: "🔗" },
 ];
 
+const EID_POLL_INTERVAL_MS = 10_000;
+const EID_POLL_TIMEOUT_MS = 60_000;
+
+function extractEidValue(response: Record<string, unknown> | undefined): string | null {
+  if (!response) return null;
+  if (typeof response.deviceInfo === "string") return response.deviceInfo;
+  if (typeof response.value === "string") return response.value;
+  if (response.deviceInfo && typeof response.deviceInfo === "object") {
+    const d = response.deviceInfo as Record<string, unknown>;
+    if (typeof d.eid === "string") return d.eid;
+    if (typeof d.value === "string") return d.value;
+  }
+  return null;
+}
+
 function QrCodeCanvas({ data }: { data: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -196,7 +211,8 @@ export default function Dashboard() {
     type: "success" | "error";
     text: string;
   } | null>(null);
-  const [eidRequestingDevice, setEidRequestingDevice] = useState<string | null>(null);
+  const [eidRequesting, setEidRequesting] = useState<Set<string>>(new Set());
+  const [eidCache, setEidCache] = useState<Map<string, string>>(new Map());
 
   // Filters
   const [deviceStateFilter, setDeviceStateFilter] = useState<string>("ALL");
@@ -338,8 +354,9 @@ export default function Dashboard() {
     setLoadingEnterprises(true);
     try {
       const data = await listEnterprises(projectId);
-      setEnterprises(Array.isArray(data) ? data : []);
-      if (data.length === 0) {
+      const list = Array.isArray(data) ? data as Enterprise[] : [];
+      setEnterprises(list);
+      if (list.length === 0) {
         showMessage("error", "등록된 Enterprise가 없습니다.");
       }
     } catch (e: unknown) {
@@ -357,8 +374,9 @@ export default function Dashboard() {
     try {
       const callbackUrl = window.location.origin + "/dashboard";
       const data = await createSignupUrl(projectId, callbackUrl);
-      if (data.url) {
-        window.open(data.url, "_blank");
+      const url = data?.url as string | undefined;
+      if (url) {
+        window.open(url, "_blank");
         showMessage(
           "success",
           "새 탭에서 Enterprise 등록을 완료하세요. 완료 후 URL에서 enterpriseToken을 복사하여 아래에 입력하세요."
@@ -382,9 +400,10 @@ export default function Dashboard() {
         signupUrlName,
         enterpriseToken
       );
-      if (data.name) {
-        setEnterprise(data.name);
-        showMessage("success", `Enterprise 생성 완료: ${data.name}`);
+      const entName = data?.name as string | undefined;
+      if (entName) {
+        setEnterprise(entName);
+        showMessage("success", `Enterprise 생성 완료: ${entName}`);
       }
     } catch (e: unknown) {
       showMessage("error", e instanceof Error ? e.message : "Unknown error");
@@ -401,7 +420,7 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const data = await listDevices(enterprise);
-      setDevices(Array.isArray(data) ? data : []);
+      setDevices(Array.isArray(data) ? data as Device[] : []);
     } catch (e: unknown) {
       showMessage("error", e instanceof Error ? e.message : "Unknown error");
     }
@@ -412,7 +431,7 @@ export default function Dashboard() {
     setLoadingDetail(true);
     try {
       const data = await getDevice(name);
-      setDetailDevice(data);
+      setDetailDevice(data as Device | null);
     } catch (e: unknown) {
       showMessage("error", e instanceof Error ? e.message : "Unknown error");
     }
@@ -504,8 +523,8 @@ export default function Dashboard() {
         command = { type: "LOCK" };
       } else if (commandType === "RESET_PASSWORD") {
         const pw = prompt("새 비밀번호를 입력하세요:");
-        if (pw === null) { setLoading(false); return; }
-        if (!confirm("비밀번호를 재설정하시겠습니까?")) { setLoading(false); return; }
+        if (pw === null) return;
+        if (!confirm("비밀번호를 재설정하시겠습니까?")) return;
         command = { type: "RESET_PASSWORD", newPassword: pw };
       } else if (commandType === "REBOOT") {
         command = { type: "REBOOT" };
@@ -514,14 +533,12 @@ export default function Dashboard() {
         const typed = prompt(
           `⚠ 관리 해제는 되돌릴 수 없습니다.\n\n해제하려면 기기 ID를 정확히 입력하세요:\n${deviceId}`
         );
-        if (typed === null) { setLoading(false); return; }
+        if (typed === null) return;
         if (typed.trim() !== deviceId) {
           showMessage("error", "기기 ID가 일치하지 않습니다. 취소되었습니다.");
-          setLoading(false);
           return;
         }
         if (!confirm(`정말로 기기 ${deviceId}의 관리를 해제하시겠습니까?\n\n이 작업 후 해당 기기는 Android Management API에서 관리되지 않습니다.`)) {
-          setLoading(false);
           return;
         }
         command = { type: "RELINQUISH_OWNERSHIP" };
@@ -529,17 +546,17 @@ export default function Dashboard() {
         const input = prompt(
           "데이터를 초기화할 패키지명을 입력하세요 (여러 개는 쉼표로 구분)\n예: com.example.app1, com.example.app2"
         );
-        if (input === null) { setLoading(false); return; }
+        if (input === null) return;
         const packageNames = input
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean);
-        if (packageNames.length === 0) { setLoading(false); return; }
+        if (packageNames.length === 0) return;
         if (
           !confirm(
             `다음 앱의 데이터를 초기화합니다:\n${packageNames.join("\n")}\n\n진행하시겠습니까?`
           )
-        ) { setLoading(false); return; }
+        ) return;
         command = {
           type: "CLEAR_APP_DATA",
           clearAppsDataParams: { packageNames },
@@ -549,9 +566,9 @@ export default function Dashboard() {
           "분실 화면에 표시할 메시지를 입력하세요:",
           "분실된 기기입니다. 발견 시 연락 부탁드립니다."
         );
-        if (message === null) { setLoading(false); return; }
+        if (message === null) return;
         const phone = prompt("연락받을 전화번호 (선택, 미입력 가능):") || "";
-        if (!confirm("이 기기를 분실 모드로 전환하시겠습니까?")) { setLoading(false); return; }
+        if (!confirm("이 기기를 분실 모드로 전환하시겠습니까?")) return;
         const startLostModeParams: Record<string, unknown> = {
           lostMessage: { defaultMessage: message },
         };
@@ -566,28 +583,39 @@ export default function Dashboard() {
       showMessage("success", `${commandType} 명령이 전송되었습니다.`);
     } catch (e: unknown) {
       showMessage("error", e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleRequestEid = async (deviceName: string) => {
-    if (eidRequestingDevice) return;
-    setEidRequestingDevice(deviceName);
+    if (eidRequesting.has(deviceName)) return;
+
+    const cached = eidCache.get(deviceName);
+    if (cached) {
+      showMessage("success", `📟 EID (캐시): ${cached}`);
+      return;
+    }
+
+    setEidRequesting((prev) => {
+      const next = new Set(prev);
+      next.add(deviceName);
+      return next;
+    });
     const startTime = Date.now();
-    const intervalMs = 10_000;
-    const maxWaitMs = 60_000;
     try {
       const op = await issueCommand(deviceName, {
         type: "REQUEST_DEVICE_INFO",
         requestDeviceInfoParams: { deviceInfo: "EID" },
       });
-      const opName = op?.name;
+      const opName = op?.name as string | undefined;
       if (!opName) throw new Error("명령 operation name이 반환되지 않았습니다");
 
-      let result: { done?: boolean; error?: { message?: string }; response?: Record<string, unknown> } | null = null;
-      while (Date.now() - startTime < maxWaitMs) {
-        await new Promise((r) => setTimeout(r, intervalMs));
-        result = await getOperation(opName);
+      type OpResult = { done?: boolean; error?: { message?: string }; response?: Record<string, unknown> };
+      let result: OpResult | null = null;
+      while (Date.now() - startTime < EID_POLL_TIMEOUT_MS) {
+        await new Promise((r) => setTimeout(r, EID_POLL_INTERVAL_MS));
+        result = await getOperation(opName) as OpResult | null;
         if (result?.done) break;
       }
 
@@ -597,12 +625,27 @@ export default function Dashboard() {
       } else if (result.error) {
         showMessage("error", `📟 오류: ${result.error.message || "unknown"} (${seconds}초)`);
       } else {
-        showMessage("success", `📟 EID 응답 받음 — ${seconds}초`);
+        const eidValue = extractEidValue(result.response);
+        if (eidValue) {
+          setEidCache((prev) => {
+            const next = new Map(prev);
+            next.set(deviceName, eidValue);
+            return next;
+          });
+          showMessage("success", `📟 EID: ${eidValue} (${seconds}초)`);
+        } else {
+          showMessage("success", `📟 EID 응답 받음 — ${seconds}초 (값 추출 실패)`);
+        }
       }
     } catch (e: unknown) {
       showMessage("error", e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setEidRequesting((prev) => {
+        const next = new Set(prev);
+        next.delete(deviceName);
+        return next;
+      });
     }
-    setEidRequestingDevice(null);
   };
 
   // ── Policies ──
@@ -614,7 +657,7 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const data = await listPolicies(enterprise);
-      setPolicies(Array.isArray(data) ? data : []);
+      setPolicies(Array.isArray(data) ? data as Policy[] : []);
     } catch (e: unknown) {
       showMessage("error", e instanceof Error ? e.message : "Unknown error");
     }
@@ -666,10 +709,10 @@ export default function Dashboard() {
     if (!confirm(`정책 "${id}"을(를) 편집기로 불러오시겠습니까?\n현재 편집 중인 내용은 사라집니다.`)) return;
     setLoading(true);
     try {
-      const data = await getPolicy(name);
+      const data = await getPolicy(name) as Record<string, unknown> | null;
       const id = name.split("/policies/")[1];
       setPolicyId(id);
-      const { name: _n, version: _v, ...rest } = data;
+      const { name: _n, version: _v, ...rest } = data ?? {};
       setPolicyJson(JSON.stringify(rest, null, 2));
       showMessage("success", "정책을 불러왔습니다.");
     } catch (e: unknown) {
@@ -688,7 +731,7 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const data = await createEnrollmentToken(enterprise, policy);
-      setEnrollmentToken(data);
+      setEnrollmentToken(data as EnrollmentToken | null);
       showMessage("success", "등록 토큰이 생성되었습니다.");
     } catch (e: unknown) {
       showMessage("error", e instanceof Error ? e.message : "Unknown error");
@@ -1057,19 +1100,26 @@ export default function Dashboard() {
                           </button>
                           <button
                             onClick={() => handleRequestEid(device.name!)}
-                            disabled={eidRequestingDevice !== null}
+                            disabled={eidRequesting.has(device.name!)}
                             className={`text-xs px-3 py-1.5 rounded-lg ${
-                              eidRequestingDevice === device.name
+                              eidRequesting.has(device.name!)
                                 ? "bg-cyan-50 text-cyan-400 cursor-wait"
-                                : eidRequestingDevice !== null
-                                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                : eidCache.has(device.name!)
+                                  ? "bg-cyan-50 text-cyan-700 hover:bg-cyan-100"
                                   : "bg-cyan-100 text-cyan-700 hover:bg-cyan-200"
                             }`}
                           >
-                            {eidRequestingDevice === device.name
+                            {eidRequesting.has(device.name!)
                               ? "⏳ 요청중..."
-                              : "📟 EID 요청"}
+                              : eidCache.has(device.name!)
+                                ? "📟 EID 재요청"
+                                : "📟 EID 요청"}
                           </button>
+                          {eidCache.has(device.name!) && (
+                            <code className="text-xs bg-cyan-50 text-cyan-800 px-2 py-1 rounded self-center">
+                              EID: {eidCache.get(device.name!)}
+                            </code>
+                          )}
                           <button
                             onClick={() => handleCommand("LOCK", device.name)}
                             className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-lg hover:bg-yellow-200"
@@ -1327,7 +1377,7 @@ export default function Dashboard() {
                 </div>
                 <button
                   onClick={handleCreateEnrollment}
-                  disabled={loading}
+                  disabled={loading || !enrollPolicyName.trim()}
                   className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
                 >
                   등록 토큰 생성

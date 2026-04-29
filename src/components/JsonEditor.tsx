@@ -131,6 +131,7 @@ const JsonEditor = forwardRef<JsonEditorHandle, JsonEditorProps>(function JsonEd
   );
 
   const lineCount = value === "" ? 1 : value.split("\n").length;
+  const [copied, setCopied] = useState(false);
 
   const handleFormat = () => {
     const view = cmRef.current?.view;
@@ -148,19 +149,43 @@ const JsonEditor = forwardRef<JsonEditorHandle, JsonEditorProps>(function JsonEd
     }
   };
 
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* 클립보드 권한 거부 — 조용히 실패 */
+    }
+  };
+
   return (
     <div className="border rounded-lg overflow-hidden bg-white">
       <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b text-xs">
         <span className="text-gray-500 font-medium">JSON</span>
-        <button
-          type="button"
-          onClick={handleFormat}
-          disabled={!status.ok}
-          className="px-2 py-0.5 rounded text-gray-600 hover:text-gray-900 hover:bg-gray-200 transition disabled:opacity-40 disabled:cursor-not-allowed"
-          title="JSON을 2칸 들여쓰기로 정렬"
-        >
-          정렬
-        </button>
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={handleCopy}
+            className={`px-2 py-0.5 rounded transition ${
+              copied
+                ? "text-green-700 bg-green-100"
+                : "text-gray-600 hover:text-gray-900 hover:bg-gray-200"
+            }`}
+            title="JSON 내용을 클립보드에 복사"
+          >
+            {copied ? "✓ 복사됨" : "복사"}
+          </button>
+          <button
+            type="button"
+            onClick={handleFormat}
+            disabled={!status.ok}
+            className="px-2 py-0.5 rounded text-gray-600 hover:text-gray-900 hover:bg-gray-200 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            title="JSON을 2칸 들여쓰기로 정렬"
+          >
+            정렬
+          </button>
+        </div>
       </div>
       <CodeMirror
         ref={cmRef}
